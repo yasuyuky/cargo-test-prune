@@ -76,6 +76,24 @@ fn duplicate_tests_are_not_both_removed_and_unique_kills_are_retained() {
 }
 
 #[test]
+fn weighted_selection_and_explicit_pins_change_the_proposal() {
+    let mut evidence = analysis(&[&[0, 1], &[0], &[1]]);
+    evidence.tests[0].duration_ms = 100;
+    assert_eq!(
+        minimize(&evidence, Weight::Count, &[])
+            .unwrap()
+            .retained
+            .len(),
+        1
+    );
+    let result = minimize(&evidence, Weight::Time, &[]).unwrap();
+    assert_eq!(result.candidates[0].test, evidence.tests[0].id());
+    let pinned = minimize(&evidence, Weight::Time, &["/t0".into()]).unwrap();
+    assert_eq!(pinned.retained.len(), 1);
+    assert!(minimize(&evidence, Weight::Count, &["missing".into()]).is_err());
+}
+
+#[test]
 fn every_small_matrix_preserves_the_union_when_candidates_are_removed_together() {
     for bits in 0_u16..512 {
         let rows: Vec<Vec<_>> = (0..3)

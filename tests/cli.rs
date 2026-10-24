@@ -168,3 +168,55 @@ fn timeouts_are_inconclusive_and_the_affected_test_is_retained() {
         include_str!("fixtures/overlap/src/lib.rs")
     );
 }
+
+#[test]
+fn workspace_scope_features_and_package_selection_are_respected() {
+    let dir = fixture();
+    let manifest = include_str!("fixtures/overlap/Cargo.toml").replace(
+        "[workspace]",
+        "[features]\nextra = []\n\n[workspace]\nmembers = [\"consumer\"]\nresolver = \"3\"",
+    );
+    fs::write(dir.path().join("Cargo.toml"), manifest).unwrap();
+    fs::create_dir_all(dir.path().join("consumer/src")).unwrap();
+    fs::write(dir.path().join("consumer/Cargo.toml"), "[package]\nname = \"consumer\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[dependencies]\noverlap = { path = \"..\" }\n").unwrap();
+    fs::write(
+        dir.path().join("consumer/src/lib.rs"),
+        "#[test]\nfn positive_one() { assert!(overlap::positive(1)); }\n",
+    )
+    .unwrap();
+    let mut source = include_str!("fixtures/overlap/src/lib.rs").to_owned();
+    source.push_str(
+        "\n#[cfg(feature = \"extra\")]\n#[test]\nfn extra_test() { assert!(positive(1)); }\n",
+    );
+    fs::write(dir.path().join("src/lib.rs"), source).unwrap();
+    mutants(dir.path(), &["false"]);
+    let output = run(
+        dir.path(),
+        &[
+            "analyze",
+            "--mutants-file",
+            "mutants.json",
+            "--features",
+            "overlap/extra",
+        ],
+    );
+    success(&output);
+    let read_tests = || {
+        let report: Value =
+            serde_json::from_str(&fs::read_to_string(dir.path().join("test-prune.json")).unwrap())
+                .unwrap();
+        report["analysis"]["tests"].as_array().unwrap().clone()
+    };
+    let tests = read_tests();
+    assert_eq!(tests.len(), 8);
+    assert!(tests.iter().any(|t| t["target"]["package"] == "consumer"));
+    assert!(tests.iter().any(|t| t["name"] == "extra_test"));
+    let selected = run(
+        dir.path(),
+        &["analyze", "--mutants-file", "mutants.json", "-p", "overlap"],
+    );
+    success(&selected);
+    let tests = read_tests();
+    assert_eq!(tests.len(), 6);
+    assert!(tests.iter().all(|t| t["target"]["package"] == "overlap"));
+}

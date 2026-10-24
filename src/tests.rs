@@ -94,6 +94,18 @@ fn weighted_selection_and_explicit_pins_change_the_proposal() {
 }
 
 #[test]
+fn lack_of_evidence_and_incomplete_runs_do_not_justify_removal() {
+    let mut evidence = analysis(&[&[0], &[0], &[]]);
+    evidence.mutants[0].status = MutationStatus::Inconclusive;
+    evidence.mutants[0].outcomes[0] = Outcome::Timeout;
+    let result = minimize(&evidence, Weight::Count, &[]).unwrap();
+    assert_eq!(result.detected_mutants, 0);
+    assert!(result.candidates.is_empty());
+    evidence.mutants[0].status = MutationStatus::Tested;
+    assert!(minimize(&evidence, Weight::Count, &[]).is_err());
+}
+
+#[test]
 fn every_small_matrix_preserves_the_union_when_candidates_are_removed_together() {
     for bits in 0_u16..512 {
         let rows: Vec<Vec<_>> = (0..3)

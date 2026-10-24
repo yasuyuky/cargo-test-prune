@@ -6,6 +6,9 @@ mod report;
 mod runner;
 mod workspace;
 
+#[cfg(test)]
+mod tests;
+
 use std::{fs, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result, ensure};

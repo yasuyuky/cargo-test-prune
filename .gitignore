@@ -1,0 +1,4 @@
+/target
+**/target/
+/test-prune.json
+tests/fixtures/**/Cargo.lock

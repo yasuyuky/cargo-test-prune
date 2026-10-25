@@ -14,7 +14,7 @@ Use a current stable Rust toolchain and install
 
 ```sh
 cargo install cargo-mutants --locked
-cargo install --path . --locked
+cargo install cargo-test-prune --locked
 
 # In the project to analyze:
 cargo test-prune analyze
@@ -27,7 +27,16 @@ The default scope is the entire workspace, even when invoked from a member.
 mutants are analyzed in generation order; the report shows the selected and
 total counts. This is a bounded experiment, not a representative random sample.
 
-Run the included small example without installing this binary:
+To install from source instead:
+
+```sh
+git clone https://github.com/yasuyuky/cargo-test-prune.git
+cd cargo-test-prune
+cargo install --path . --locked
+```
+
+From the repository checkout, run the included small example without installing
+this binary:
 
 ```sh
 cargo run -- analyze \

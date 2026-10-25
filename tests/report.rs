@@ -133,3 +133,11 @@ fn mermaid_escapes_labels_without_breaking_diagrams() {
     assert_eq!(output.matches("```mermaid\n").count(), 2);
     assert!(!output.contains("<test>"));
 }
+
+#[test]
+fn text_remains_the_default_format() {
+    let output = render(&report(), &[]);
+    assert_eq!(output, render(&report(), &["--format", "text"]));
+    assert!(output.contains("Removal candidates (one combined proposal):"));
+    assert!(!output.contains("```mermaid"));
+}

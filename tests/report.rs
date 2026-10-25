@@ -116,3 +116,20 @@ fn mermaid_handles_no_candidates() {
     assert!(output.contains("No removal candidates."));
     assert!(!output.contains("```mermaid"));
 }
+
+#[test]
+fn mermaid_escapes_labels_without_breaking_diagrams() {
+    let mut evidence = report();
+    evidence["analysis"]["tests"][2]["name"] = json!("quoted\"[name]\\path\n```mermaid");
+    evidence["analysis"]["tests"][0]["name"] = json!("kept<test>");
+    evidence["analysis"]["mutants"][0]["mutant"]["name"] =
+        json!("replace \"x\" < y && #quot; > `値`\r\nnext");
+    let output = render(&evidence, &["--format", "mermaid"]);
+    assert!(output.contains("quoted#34;[name]#92;path #96;#96;#96;mermaid"));
+    assert!(output.contains("Retain: demo/lib:demo/kept#60;test#62;"));
+    assert!(
+        output.contains("M1: replace #34;x#34; #60; y #38;#38; #35;quot; #62; #96;値#96;  next")
+    );
+    assert_eq!(output.matches("```mermaid\n").count(), 2);
+    assert!(!output.contains("<test>"));
+}

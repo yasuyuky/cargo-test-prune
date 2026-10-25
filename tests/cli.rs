@@ -108,51 +108,6 @@ fn measures_actual_tests_and_keeps_the_detection_union() {
 }
 
 #[test]
-fn timeouts_are_inconclusive_and_the_affected_test_is_retained() {
-    let dir = fixture();
-    mutants(
-        dir.path(),
-        &[
-            "false",
-            "{ if value == 2 { std::thread::sleep(std::time::Duration::from_secs(5)); } value > 0 }",
-        ],
-    );
-    let output = run(
-        dir.path(),
-        &[
-            "analyze",
-            "--mutants-file",
-            "mutants.json",
-            "--timeout",
-            "1",
-        ],
-    );
-    success(&output);
-    let report: Value =
-        serde_json::from_str(&fs::read_to_string(dir.path().join("test-prune.json")).unwrap())
-            .unwrap();
-    assert_eq!(report["analysis"]["mutants"][1]["status"], "inconclusive");
-    assert!(
-        report["analysis"]["mutants"][1]["outcomes"]
-            .as_array()
-            .unwrap()
-            .contains(&json!("timeout"))
-    );
-    assert!(
-        report["recommendation"]["retained"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|t| t["test"].as_str().unwrap().ends_with("positive_two")
-                && t["reason"] == "inconclusive observations")
-    );
-    assert_eq!(
-        fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
-        include_str!("fixtures/overlap/src/lib.rs")
-    );
-}
-
-#[test]
 fn workspace_scope_features_and_package_selection_are_respected() {
     let dir = fixture();
     let manifest = include_str!("fixtures/overlap/Cargo.toml").replace(

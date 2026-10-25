@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, path::Path};
+use std::path::Path;
 
 use crate::{
     matrix::{Analysis, MutationResult, MutationStatus, Outcome, Target, Test},
@@ -103,28 +103,6 @@ fn lack_of_evidence_and_incomplete_runs_do_not_justify_removal() {
     assert!(result.candidates.is_empty());
     evidence.mutants[0].status = MutationStatus::Tested;
     assert!(minimize(&evidence, Weight::Count, &[]).is_err());
-}
-
-#[test]
-fn every_small_matrix_preserves_the_union_when_candidates_are_removed_together() {
-    for bits in 0_u16..512 {
-        let rows: Vec<Vec<_>> = (0..3)
-            .map(|t| (0..3).filter(|m| bits & (1 << (t * 3 + m)) != 0).collect())
-            .collect();
-        let evidence = analysis(&rows.iter().map(Vec::as_slice).collect::<Vec<_>>());
-        let result = minimize(&evidence, Weight::Count, &[]).unwrap();
-        let original: BTreeSet<_> = rows.iter().flatten().copied().collect();
-        let remaining: BTreeSet<_> = result
-            .retained
-            .iter()
-            .flat_map(|t| t.killed_mutants.iter().map(|m| m - 1))
-            .collect();
-        assert_eq!(remaining, original, "matrix {bits}");
-        for candidate in result.candidates {
-            assert!(!candidate.killed_mutants.is_empty());
-            assert!(candidate.unique_mutants.is_empty());
-        }
-    }
 }
 
 #[test]

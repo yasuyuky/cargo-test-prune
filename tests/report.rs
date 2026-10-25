@@ -109,3 +109,10 @@ fn mermaid_recomputes_selection_with_pins_and_weights() {
         assert!(output.contains("Retain: demo/lib:demo/c"));
     }
 }
+
+#[test]
+fn mermaid_handles_no_candidates() {
+    let output = render(&report(), &["--format", "mermaid", "--keep", "demo"]);
+    assert!(output.contains("No removal candidates."));
+    assert!(!output.contains("```mermaid"));
+}

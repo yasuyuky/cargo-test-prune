@@ -166,6 +166,21 @@ process-group termination and temporary workspace cleanup. The test suite uses
 explicit mutation lists and does not require cargo-mutants. The example above
 exercises the actual cargo-mutants integration.
 
+## Publishing
+
+After running the development checks above, inspect and verify the package:
+
+```sh
+cargo package --list --locked
+cargo publish --dry-run --locked
+```
+
+The archive includes the CLI sources, README, license, and Cargo metadata.
+Integration tests and their nested fixture package remain in the repository.
+Run the checks from a clean, committed checkout before publishing. After
+authenticating with crates.io, publish with `cargo publish --locked` and tag the
+published commit as `v0.1.0`.
+
 ## License
 
 Licensed under the [MIT License](LICENSE).

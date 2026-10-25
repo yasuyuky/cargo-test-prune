@@ -96,3 +96,16 @@ fn mermaid_shows_each_candidates_mutants_and_retained_cover() {
     assert!(!output.contains("unrelated"));
     assert!(!output.contains("no_kills"));
 }
+
+#[test]
+fn mermaid_recomputes_selection_with_pins_and_weights() {
+    for selection in [["--keep", "/c"], ["--weight", "time"]] {
+        let output = render(
+            &report(),
+            &["--format", "mermaid", selection[0], selection[1]],
+        );
+        assert!(output.contains("Candidate: demo/lib:demo/b"));
+        assert!(!output.contains("Candidate: demo/lib:demo/c"));
+        assert!(output.contains("Retain: demo/lib:demo/c"));
+    }
+}

@@ -8,6 +8,8 @@ repository = "https://github.com/yasuyuky/cargo-test-prune"
 readme = "README.md"
 keywords = ["cargo", "testing", "mutation-testing", "test-reduction"]
 categories = ["development-tools::cargo-plugins", "development-tools::testing"]
+# Integration tests use a nested fixture package that Cargo excludes from archives.
+include = ["/src/**", "/README.md", "/LICENSE"]
 
 [dependencies]
 anyhow = "1"

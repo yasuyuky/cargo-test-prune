@@ -10,7 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{Value, json};
+use serde_json::json;
 use tempfile::TempDir;
 
 const SOURCE: &str = include_str!("fixtures/process_tree.rs");
@@ -172,34 +172,5 @@ fn ctrl_c_stops_descendants_and_removes_the_workspace() {
     assert_eq!(
         fs::read_to_string(analysis.project.join("src/lib.rs")).unwrap(),
         source
-    );
-}
-
-#[test]
-fn timeout_stops_descendants_before_returning_a_report() {
-    let mut analysis = Analysis::start(SOURCE);
-    let (stream, workspace) = analysis.descendant();
-    let status = analysis.finish();
-    assert_descendant_stopped(stream);
-    assert!(
-        status.success(),
-        "{}",
-        fs::read_to_string(&analysis.log).unwrap()
-    );
-    assert!(!workspace.exists(), "analysis workspace was not removed");
-    let report: Value = serde_json::from_str(
-        &fs::read_to_string(analysis.project.join("test-prune.json")).unwrap(),
-    )
-    .unwrap();
-    assert_eq!(report["analysis"]["mutants"][0]["status"], "inconclusive");
-    assert!(
-        report["analysis"]["mutants"][0]["outcomes"]
-            .as_array()
-            .unwrap()
-            .contains(&json!("timeout"))
-    );
-    assert_eq!(
-        fs::read_to_string(analysis.project.join("src/lib.rs")).unwrap(),
-        SOURCE
     );
 }

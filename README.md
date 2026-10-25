@@ -53,6 +53,9 @@ cargo test-prune analyze --keep negative --keep backward_compatibility
 # Reuse observations without rebuilding or running tests.
 cargo test-prune report test-prune.json --keep negative
 cargo test-prune report test-prune.json --weight time
+
+# Export one Mermaid diagram per removal candidate, without running tests.
+cargo test-prune report test-prune.json --format mermaid > test-prune.md
 ```
 
 `--keep` is repeatable and errors if a pattern matches no tests. `report` computes
@@ -65,6 +68,14 @@ Each candidate lists retained tests whose combined kills cover its kills.
 removed if doing so would lose a detected mutant. Greedy weighted set cover,
 followed by removal of redundant selections, produces a small set; it does not
 guarantee a globally optimal solution.
+
+`report --format mermaid` writes Markdown with one Mermaid flowchart per
+candidate. Each diagram shows the candidate's detected mutants and the retained
+tests that cover them. Solid arrows show retained tests' detections; dotted
+arrows show the candidate's detections. Mutant labels include their one-based
+report numbers and mutation descriptions. Unrelated mutants and tests are omitted.
+The diagrams reflect `--keep` and `--weight`, just like the default text report;
+the saved JSON is unchanged. Open the Markdown in a Mermaid-capable viewer.
 
 ## How measurement works
 

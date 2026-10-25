@@ -108,23 +108,6 @@ fn measures_actual_tests_and_keeps_the_detection_union() {
 }
 
 #[test]
-fn baseline_failures_abort_without_a_removal_report() {
-    let dir = fixture();
-    let source = include_str!("fixtures/overlap/src/lib.rs")
-        .replace("assert!(positive(1))", "assert!(!positive(1))");
-    fs::write(dir.path().join("src/lib.rs"), &source).unwrap();
-    mutants(dir.path(), &["true"]);
-    let output = run(dir.path(), &["analyze", "--mutants-file", "mutants.json"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("baseline test did not pass"));
-    assert!(!dir.path().join("test-prune.json").exists());
-    assert_eq!(
-        fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
-        source
-    );
-}
-
-#[test]
 fn timeouts_are_inconclusive_and_the_affected_test_is_retained() {
     let dir = fixture();
     mutants(

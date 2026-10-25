@@ -138,10 +138,10 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
-Tests cover the combined-removal invariant over all 512 three-test/three-mutant
-matrices and execute real Cargo fixtures for baseline failures, ignored tests,
-compile failures, and timeouts. On Unix, a live descendant holds a local socket
-open so interruption and timeout tests also verify process-group termination
-and temporary workspace cleanup. The test suite uses explicit mutation lists
-and does not require cargo-mutants. The example above exercises the actual
-cargo-mutants integration.
+Tests cover duplicate detection, unique kills, weights, pins, and incomplete
+observations, and execute real Cargo fixtures for combined removal, ignored
+tests, compile failures, and workspace and feature selection. On Unix, a live
+descendant holds a local socket open so the interruption test also verifies
+process-group termination and temporary workspace cleanup. The test suite uses
+explicit mutation lists and does not require cargo-mutants. The example above
+exercises the actual cargo-mutants integration.

@@ -29,6 +29,61 @@ impl Report {
         Ok(())
     }
 
+    pub fn print_mermaid(&self) {
+        println!("# Test removal candidates\n");
+        println!("These diagrams describe one combined proposal, limited to observed mutants.");
+        println!("Solid arrows: retained tests. Dotted arrows: removal candidate.");
+        println!("Mutant numbers are one-based indices into analysis.mutants.");
+        println!(
+            "Review specification value before deletion; the selection is not a guaranteed minimum.\n"
+        );
+        if self.recommendation.candidates.is_empty() {
+            println!("No removal candidates.");
+        }
+        for (index, candidate) in self.recommendation.candidates.iter().enumerate() {
+            let witnesses: Vec<_> = self
+                .recommendation
+                .retained
+                .iter()
+                .enumerate()
+                .filter(|(_, retained)| candidate.covered_by.contains(&retained.test))
+                .collect();
+            println!("## Candidate {}\n", index + 1);
+            println!("```mermaid\nflowchart LR");
+            println!("    subgraph tests[\"Tests\"]");
+            println!(
+                "        candidate[\"Candidate: {}\"]:::candidate",
+                mermaid_label(&candidate.test)
+            );
+            for (i, retained) in &witnesses {
+                println!(
+                    "        retained_{i}[\"Retain: {}\"]:::retained",
+                    mermaid_label(&retained.test)
+                );
+            }
+            println!("    end\n    subgraph mutants[\"Detected mutants\"]");
+            for number in &candidate.killed_mutants {
+                let mutant = &self.analysis.mutants[number - 1].mutant;
+                println!(
+                    "        mutant_{number}[\"M{number}: {}\"]",
+                    mermaid_label(&mutant.name)
+                );
+            }
+            println!("    end");
+            for number in &candidate.killed_mutants {
+                println!("    candidate -.-> mutant_{number}");
+                for (i, retained) in &witnesses {
+                    if retained.killed_mutants.contains(number) {
+                        println!("    retained_{i} --> mutant_{number}");
+                    }
+                }
+            }
+            println!("    classDef retained fill:#dcfce7,stroke:#15803d,color:#14532d");
+            println!("    classDef candidate fill:#fef3c7,stroke:#b45309,color:#78350f");
+            println!("```\n");
+        }
+    }
+
     pub fn print(&self) {
         let analysis = &self.analysis;
         let recommendation = &self.recommendation;
@@ -82,4 +137,18 @@ impl Report {
         );
         println!("No source files were changed. Greedy selection is not a guaranteed minimum.");
     }
+}
+
+fn mermaid_label(value: &str) -> String {
+    let mut label = String::new();
+    for ch in value.chars() {
+        match ch {
+            '"' | '&' | '#' | '<' | '>' | '`' | '\\' => {
+                label.push_str(&format!("#{};", ch as u32));
+            }
+            ch if ch.is_whitespace() || ch.is_control() => label.push(' '),
+            ch => label.push(ch),
+        }
+    }
+    label
 }

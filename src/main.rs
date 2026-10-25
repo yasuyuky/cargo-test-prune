@@ -12,7 +12,7 @@ mod tests;
 use std::{fs, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result, ensure};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use matrix::{Analysis, MutationResult, MutationStatus, Outcome};
 use minimize::{Weight, minimize};
@@ -39,9 +39,18 @@ enum Action {
     /// Recompute a proposal from saved evidence, without running tests
     Report {
         input: PathBuf,
+        /// Output plain text or Markdown with a Mermaid diagram per candidate
+        #[arg(long, value_enum, default_value = "text")]
+        format: ReportFormat,
         #[command(flatten)]
         selection: Selection,
     },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum ReportFormat {
+    Text,
+    Mermaid,
 }
 
 #[derive(Args)]
@@ -94,10 +103,17 @@ fn main() -> Result<()> {
     }
     match Cli::parse_from(args).command {
         Action::Analyze(options) => analyze(options),
-        Action::Report { input, selection } => {
+        Action::Report {
+            input,
+            format,
+            selection,
+        } => {
             let mut report: Report = serde_json::from_str(&fs::read_to_string(input)?)?;
             report.recommendation = minimize(&report.analysis, selection.weight, &selection.keep)?;
-            report.print();
+            match format {
+                ReportFormat::Text => report.print(),
+                ReportFormat::Mermaid => report.print_mermaid(),
+            }
             Ok(())
         }
     }

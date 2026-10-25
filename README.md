@@ -156,3 +156,7 @@ descendant holds a local socket open so the interruption test also verifies
 process-group termination and temporary workspace cleanup. The test suite uses
 explicit mutation lists and does not require cargo-mutants. The example above
 exercises the actual cargo-mutants integration.
+
+## License
+
+Licensed under the [MIT License](LICENSE).

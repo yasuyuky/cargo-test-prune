@@ -3,6 +3,7 @@ name = "cargo-test-prune"
 version = "0.1.0"
 edition = "2024"
 description = "Find Rust tests with overlapping mutation detection"
+license = "MIT"
 
 [dependencies]
 anyhow = "1"

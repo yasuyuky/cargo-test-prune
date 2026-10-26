@@ -158,6 +158,9 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
+GitHub Actions runs these checks on Ubuntu with stable Rust for pull requests
+and pushes to `main`. The CI workflow can also be run manually.
+
 Tests cover duplicate detection, unique kills, weights, pins, and incomplete
 observations, and execute real Cargo fixtures for combined removal, ignored
 tests, compile failures, and workspace and feature selection. On Unix, a live

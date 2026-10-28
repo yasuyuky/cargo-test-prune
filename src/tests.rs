@@ -221,3 +221,19 @@ fn local_search_preserves_pins_and_inconclusive_tests() {
     assert_eq!(result.retained[0].test, evidence.tests[0].id());
     assert_eq!(result.retained[0].reason, "inconclusive observations");
 }
+
+#[test]
+fn local_search_keeps_ignored_tests_and_tests_without_kills() {
+    let mut evidence = analysis(&[&[0], &[0], &[], &[]]);
+    evidence.tests[2].baseline = Outcome::Ignored;
+    evidence.mutants[0].outcomes[2] = Outcome::Ignored;
+    let result = minimize(&evidence, Weight::Count, &[]).unwrap();
+    assert_eq!(
+        result
+            .retained
+            .iter()
+            .map(|d| d.test.clone())
+            .collect::<Vec<_>>(),
+        [0, 2, 3].map(|i| evidence.tests[i].id())
+    );
+}

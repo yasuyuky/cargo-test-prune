@@ -173,3 +173,32 @@ fn local_search_removes_selections_made_redundant_by_a_swap() {
         [3, 5].map(|i| evidence.tests[i].id())
     );
 }
+
+#[test]
+fn local_search_only_accepts_strictly_cheaper_time_costs() {
+    for (cost, replacement_cost, swapped) in [
+        (10, 19, true),
+        (10, 20, false),
+        (10, 21, false),
+        (u64::MAX - 1, u64::MAX, true),
+    ] {
+        let mut evidence = swap_example();
+        for test in &mut evidence.tests {
+            test.duration_ms = cost;
+        }
+        evidence.tests[3].duration_ms = replacement_cost;
+        let result = minimize(&evidence, Weight::Time, &[]).unwrap();
+        let expected = if swapped { vec![1, 3] } else { vec![0, 1, 2] };
+        assert_eq!(
+            result
+                .retained
+                .iter()
+                .map(|d| d.test.clone())
+                .collect::<Vec<_>>(),
+            expected
+                .iter()
+                .map(|&i| evidence.tests[i].id())
+                .collect::<Vec<_>>()
+        );
+    }
+}

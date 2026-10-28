@@ -151,3 +151,25 @@ fn local_search_repeats_for_independent_groups() {
         [1, 3, 5, 7].map(|i| evidence.tests[i].id())
     );
 }
+
+#[test]
+fn local_search_removes_selections_made_redundant_by_a_swap() {
+    let evidence = analysis(&[
+        &[1, 3, 4, 5],
+        &[0, 3, 6],
+        &[5, 7],
+        &[0, 2, 4, 5],
+        &[2, 3, 5, 6],
+        &[1, 3, 6, 7],
+        &[1, 3, 5],
+    ]);
+    let result = minimize(&evidence, Weight::Count, &[]).unwrap();
+    assert_eq!(
+        result
+            .retained
+            .iter()
+            .map(|d| d.test.clone())
+            .collect::<Vec<_>>(),
+        [3, 5].map(|i| evidence.tests[i].id())
+    );
+}

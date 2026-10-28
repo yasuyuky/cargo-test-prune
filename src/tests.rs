@@ -128,3 +128,26 @@ fn local_search_replaces_two_tests_and_preserves_detection() {
         }));
     }
 }
+
+#[test]
+fn local_search_repeats_for_independent_groups() {
+    let evidence = analysis(&[
+        &[1, 2, 4, 6],
+        &[1, 3, 5, 6],
+        &[0, 1, 4, 5],
+        &[0, 2, 3, 4],
+        &[8, 9, 11, 13],
+        &[8, 10, 12, 13],
+        &[7, 8, 11, 12],
+        &[7, 9, 10, 11],
+    ]);
+    let result = minimize(&evidence, Weight::Count, &[]).unwrap();
+    assert_eq!(
+        result
+            .retained
+            .iter()
+            .map(|d| d.test.clone())
+            .collect::<Vec<_>>(),
+        [1, 3, 5, 7].map(|i| evidence.tests[i].id())
+    );
+}

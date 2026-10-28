@@ -41,6 +41,14 @@ pub fn minimize(analysis: &Analysis, weight: Weight, keep: &[String]) -> Result<
         );
     }
     let kills = analysis.kills();
+    let costs: Vec<_> = analysis
+        .tests
+        .iter()
+        .map(|test| match weight {
+            Weight::Count => 1,
+            Weight::Time => u128::from(test.duration_ms.max(1)),
+        })
+        .collect();
     let universe: BTreeSet<_> = kills.iter().flatten().copied().collect();
     let reasons: Vec<_> = analysis
         .tests
@@ -70,15 +78,11 @@ pub fn minimize(analysis: &Analysis, weight: Weight, keep: &[String]) -> Result<
         let mut best = None;
         let mut best_gain = 0_u128;
         let mut best_cost = 1_u128;
-        for (i, test) in analysis.tests.iter().enumerate() {
+        for (i, &cost) in costs.iter().enumerate() {
             if retained.contains(&i) {
                 continue;
             }
             let gain = kills[i].difference(&covered).count() as u128;
-            let cost = match weight {
-                Weight::Count => 1,
-                Weight::Time => u128::from(test.duration_ms.max(1)),
-            };
             if gain * best_cost > best_gain * cost {
                 best = Some(i);
                 best_gain = gain;
@@ -89,20 +93,33 @@ pub fn minimize(analysis: &Analysis, weight: Weight, keep: &[String]) -> Result<
         retained.insert(i);
         covered.extend(&kills[i]);
     }
-    // A later choice may make an earlier greedy choice redundant.
-    for i in retained.clone().into_iter().rev() {
-        if reasons[i].is_some() {
-            continue;
+    loop {
+        // Greedy choices and swaps can make other selections redundant.
+        for i in retained.clone().into_iter().rev() {
+            if reasons[i].is_some() {
+                continue;
+            }
+            let others: BTreeSet<_> = retained
+                .iter()
+                .filter(|&&j| j != i)
+                .flat_map(|&j| &kills[j])
+                .copied()
+                .collect();
+            if kills[i].is_subset(&others) {
+                retained.remove(&i);
+            }
         }
-        let others: BTreeSet<_> = retained
+        let removable: Vec<_> = retained
             .iter()
-            .filter(|&&j| j != i)
-            .flat_map(|&j| &kills[j])
             .copied()
+            .filter(|&i| reasons[i].is_none())
             .collect();
-        if kills[i].is_subset(&others) {
-            retained.remove(&i);
-        }
+        let Some((a, b, replacement)) = find_swap(&kills, &costs, &retained, &removable) else {
+            break;
+        };
+        retained.remove(&a);
+        retained.remove(&b);
+        retained.insert(replacement);
     }
     let mut recommendation = Recommendation {
         weight,
@@ -146,4 +163,35 @@ pub fn minimize(analysis: &Analysis, weight: Weight, keep: &[String]) -> Result<
         }
     }
     Ok(recommendation)
+}
+
+fn find_swap(
+    kills: &[BTreeSet<usize>],
+    costs: &[u128],
+    retained: &BTreeSet<usize>,
+    removable: &[usize],
+) -> Option<(usize, usize, usize)> {
+    for (index, &a) in removable.iter().enumerate() {
+        for &b in &removable[index + 1..] {
+            let others: BTreeSet<_> = retained
+                .iter()
+                .filter(|&&i| i != a && i != b)
+                .flat_map(|&i| &kills[i])
+                .copied()
+                .collect();
+            let needed: BTreeSet<_> = kills[a]
+                .union(&kills[b])
+                .copied()
+                .filter(|m| !others.contains(m))
+                .collect();
+            if let Some(replacement) = (0..kills.len()).find(|&i| {
+                !retained.contains(&i)
+                    && costs[i] < costs[a] + costs[b]
+                    && needed.is_subset(&kills[i])
+            }) {
+                return Some((a, b, replacement));
+            }
+        }
+    }
+    None
 }

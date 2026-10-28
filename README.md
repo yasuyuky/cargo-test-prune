@@ -74,9 +74,13 @@ uses baseline wall time, including Cargo startup overhead, so results can vary.
 
 Each candidate lists retained tests whose combined kills cover its kills.
 **The candidates form one combined proposal**: identical tests are never both
-removed if doing so would lose a detected mutant. Greedy weighted set cover,
-followed by removal of redundant selections, produces a small set; it does not
-guarantee a globally optimal solution.
+removed if doing so would lose a detected mutant. Greedy weighted set cover is
+followed by removal of redundant selections and local search: two selected
+tests may be replaced by one unselected test if this preserves detection and
+strictly lowers the selected weight's total cost. Redundancy removal and swaps
+repeat until no further swap is found. Tests required by `--keep` or insufficient
+evidence are retained throughout. This does not guarantee a globally optimal
+solution.
 
 `report --format mermaid` writes Markdown with one Mermaid flowchart per
 candidate. Each diagram shows the candidate's detected mutants and the retained

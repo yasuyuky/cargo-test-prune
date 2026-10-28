@@ -102,3 +102,138 @@ fn lack_of_evidence_and_incomplete_runs_do_not_justify_removal() {
     evidence.mutants[0].status = MutationStatus::Tested;
     assert!(minimize(&evidence, Weight::Count, &[]).is_err());
 }
+
+fn swap_example() -> Analysis {
+    analysis(&[&[1, 2, 4, 6], &[1, 3, 5, 6], &[0, 1, 4, 5], &[0, 2, 3, 4]])
+}
+
+#[test]
+fn local_search_replaces_two_tests_and_preserves_detection() {
+    let evidence = swap_example();
+    let result = minimize(&evidence, Weight::Count, &[]).unwrap();
+    let expected = [1, 3].map(|i| evidence.tests[i].id());
+    assert_eq!(
+        result.retained.iter().map(|d| &d.test).collect::<Vec<_>>(),
+        expected.iter().collect::<Vec<_>>()
+    );
+    assert_eq!(result.detected_mutants, 7);
+    assert_eq!(result.candidates.len(), 2);
+    for candidate in &result.candidates {
+        assert_eq!(candidate.covered_by, expected);
+        assert!(candidate.killed_mutants.iter().all(|m| {
+            result
+                .retained
+                .iter()
+                .any(|test| test.killed_mutants.contains(m))
+        }));
+    }
+}
+
+#[test]
+fn local_search_repeats_for_independent_groups() {
+    let evidence = analysis(&[
+        &[1, 2, 4, 6],
+        &[1, 3, 5, 6],
+        &[0, 1, 4, 5],
+        &[0, 2, 3, 4],
+        &[8, 9, 11, 13],
+        &[8, 10, 12, 13],
+        &[7, 8, 11, 12],
+        &[7, 9, 10, 11],
+    ]);
+    let result = minimize(&evidence, Weight::Count, &[]).unwrap();
+    assert_eq!(
+        result
+            .retained
+            .iter()
+            .map(|d| d.test.clone())
+            .collect::<Vec<_>>(),
+        [1, 3, 5, 7].map(|i| evidence.tests[i].id())
+    );
+}
+
+#[test]
+fn local_search_removes_selections_made_redundant_by_a_swap() {
+    let evidence = analysis(&[
+        &[1, 3, 4, 5],
+        &[0, 3, 6],
+        &[5, 7],
+        &[0, 2, 4, 5],
+        &[2, 3, 5, 6],
+        &[1, 3, 6, 7],
+        &[1, 3, 5],
+    ]);
+    let result = minimize(&evidence, Weight::Count, &[]).unwrap();
+    assert_eq!(
+        result
+            .retained
+            .iter()
+            .map(|d| d.test.clone())
+            .collect::<Vec<_>>(),
+        [3, 5].map(|i| evidence.tests[i].id())
+    );
+}
+
+#[test]
+fn local_search_only_accepts_strictly_cheaper_time_costs() {
+    for (cost, replacement_cost, swapped) in [
+        (10, 19, true),
+        (10, 20, false),
+        (10, 21, false),
+        (u64::MAX - 1, u64::MAX, true),
+    ] {
+        let mut evidence = swap_example();
+        for test in &mut evidence.tests {
+            test.duration_ms = cost;
+        }
+        evidence.tests[3].duration_ms = replacement_cost;
+        let result = minimize(&evidence, Weight::Time, &[]).unwrap();
+        let expected = if swapped { vec![1, 3] } else { vec![0, 1, 2] };
+        assert_eq!(
+            result
+                .retained
+                .iter()
+                .map(|d| d.test.clone())
+                .collect::<Vec<_>>(),
+            expected
+                .iter()
+                .map(|&i| evidence.tests[i].id())
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn local_search_preserves_pins_and_inconclusive_tests() {
+    let mut evidence = swap_example();
+    let pinned = minimize(&evidence, Weight::Count, &["/t0".into()]).unwrap();
+    assert_eq!(pinned.retained.len(), 3);
+    assert_eq!(pinned.retained[0].test, evidence.tests[0].id());
+    assert_eq!(pinned.retained[0].reason, "explicitly kept");
+
+    let mut incomplete = analysis(&[&[0], &[], &[], &[]]).mutants.remove(0);
+    incomplete.status = MutationStatus::Inconclusive;
+    incomplete.outcomes[0] = Outcome::Timeout;
+    evidence.mutants.push(incomplete);
+    evidence.generated_mutants += 1;
+    let result = minimize(&evidence, Weight::Count, &[]).unwrap();
+    assert_eq!(result.retained.len(), 3);
+    assert_eq!(result.retained[0].test, evidence.tests[0].id());
+    assert_eq!(result.retained[0].reason, "inconclusive observations");
+}
+
+#[test]
+fn local_search_keeps_ignored_tests_and_tests_without_kills() {
+    let mut evidence = analysis(&[&[0], &[0], &[], &[]]);
+    evidence.tests[2].baseline = Outcome::Ignored;
+    evidence.mutants[0].outcomes[2] = Outcome::Ignored;
+    let result = minimize(&evidence, Weight::Count, &[]).unwrap();
+    assert_eq!(
+        result
+            .retained
+            .iter()
+            .map(|d| d.test.clone())
+            .collect::<Vec<_>>(),
+        [0, 2, 3].map(|i| evidence.tests[i].id())
+    );
+}

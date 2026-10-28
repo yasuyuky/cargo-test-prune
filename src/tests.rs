@@ -202,3 +202,22 @@ fn local_search_only_accepts_strictly_cheaper_time_costs() {
         );
     }
 }
+
+#[test]
+fn local_search_preserves_pins_and_inconclusive_tests() {
+    let mut evidence = swap_example();
+    let pinned = minimize(&evidence, Weight::Count, &["/t0".into()]).unwrap();
+    assert_eq!(pinned.retained.len(), 3);
+    assert_eq!(pinned.retained[0].test, evidence.tests[0].id());
+    assert_eq!(pinned.retained[0].reason, "explicitly kept");
+
+    let mut incomplete = analysis(&[&[0], &[], &[], &[]]).mutants.remove(0);
+    incomplete.status = MutationStatus::Inconclusive;
+    incomplete.outcomes[0] = Outcome::Timeout;
+    evidence.mutants.push(incomplete);
+    evidence.generated_mutants += 1;
+    let result = minimize(&evidence, Weight::Count, &[]).unwrap();
+    assert_eq!(result.retained.len(), 3);
+    assert_eq!(result.retained[0].test, evidence.tests[0].id());
+    assert_eq!(result.retained[0].reason, "inconclusive observations");
+}

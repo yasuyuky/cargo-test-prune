@@ -102,3 +102,29 @@ fn lack_of_evidence_and_incomplete_runs_do_not_justify_removal() {
     evidence.mutants[0].status = MutationStatus::Tested;
     assert!(minimize(&evidence, Weight::Count, &[]).is_err());
 }
+
+fn swap_example() -> Analysis {
+    analysis(&[&[1, 2, 4, 6], &[1, 3, 5, 6], &[0, 1, 4, 5], &[0, 2, 3, 4]])
+}
+
+#[test]
+fn local_search_replaces_two_tests_and_preserves_detection() {
+    let evidence = swap_example();
+    let result = minimize(&evidence, Weight::Count, &[]).unwrap();
+    let expected = [1, 3].map(|i| evidence.tests[i].id());
+    assert_eq!(
+        result.retained.iter().map(|d| &d.test).collect::<Vec<_>>(),
+        expected.iter().collect::<Vec<_>>()
+    );
+    assert_eq!(result.detected_mutants, 7);
+    assert_eq!(result.candidates.len(), 2);
+    for candidate in &result.candidates {
+        assert_eq!(candidate.covered_by, expected);
+        assert!(candidate.killed_mutants.iter().all(|m| {
+            result
+                .retained
+                .iter()
+                .any(|test| test.killed_mutants.contains(m))
+        }));
+    }
+}

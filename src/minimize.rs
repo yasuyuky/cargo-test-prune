@@ -41,6 +41,10 @@ pub fn minimize(analysis: &Analysis, weight: Weight, keep: &[String]) -> Result<
         );
     }
     let kills = analysis.kills();
+    let mut kill_counts = vec![0_usize; analysis.mutants.len()];
+    for &m in kills.iter().flatten() {
+        kill_counts[m] += 1;
+    }
     let costs: Vec<_> = analysis
         .tests
         .iter()
@@ -93,20 +97,21 @@ pub fn minimize(analysis: &Analysis, weight: Weight, keep: &[String]) -> Result<
         retained.insert(i);
         covered.extend(&kills[i]);
     }
+    let mut coverage = vec![0_usize; analysis.mutants.len()];
+    for &m in retained.iter().flat_map(|&i| &kills[i]) {
+        coverage[m] += 1;
+    }
     loop {
         // Greedy choices and swaps can make other selections redundant.
         for i in retained.clone().into_iter().rev() {
             if reasons[i].is_some() {
                 continue;
             }
-            let others: BTreeSet<_> = retained
-                .iter()
-                .filter(|&&j| j != i)
-                .flat_map(|&j| &kills[j])
-                .copied()
-                .collect();
-            if kills[i].is_subset(&others) {
+            if kills[i].iter().all(|&m| coverage[m] > 1) {
                 retained.remove(&i);
+                for &m in &kills[i] {
+                    coverage[m] -= 1;
+                }
             }
         }
         let removable: Vec<_> = retained
@@ -114,12 +119,20 @@ pub fn minimize(analysis: &Analysis, weight: Weight, keep: &[String]) -> Result<
             .copied()
             .filter(|&i| reasons[i].is_none())
             .collect();
-        let Some((a, b, replacement)) = find_swap(&kills, &costs, &retained, &removable) else {
+        let Some((a, b, replacement)) = find_swap(&kills, &costs, &retained, &removable, &coverage)
+        else {
             break;
         };
-        retained.remove(&a);
-        retained.remove(&b);
+        for i in [a, b] {
+            retained.remove(&i);
+            for &m in &kills[i] {
+                coverage[m] -= 1;
+            }
+        }
         retained.insert(replacement);
+        for &m in &kills[replacement] {
+            coverage[m] += 1;
+        }
     }
     let mut recommendation = Recommendation {
         weight,
@@ -130,7 +143,7 @@ pub fn minimize(analysis: &Analysis, weight: Weight, keep: &[String]) -> Result<
     for i in 0..ids.len() {
         let unique: Vec<_> = kills[i]
             .iter()
-            .filter(|m| kills.iter().filter(|set| set.contains(m)).count() == 1)
+            .filter(|&&m| kill_counts[m] == 1)
             .map(|m| m + 1)
             .collect();
         let decision = Decision {
@@ -170,19 +183,18 @@ fn find_swap(
     costs: &[u128],
     retained: &BTreeSet<usize>,
     removable: &[usize],
+    coverage: &[usize],
 ) -> Option<(usize, usize, usize)> {
     for (index, &a) in removable.iter().enumerate() {
         for &b in &removable[index + 1..] {
-            let others: BTreeSet<_> = retained
-                .iter()
-                .filter(|&&i| i != a && i != b)
-                .flat_map(|&i| &kills[i])
-                .copied()
-                .collect();
+            // The replacement must cover mutants that lose every retained detector.
             let needed: BTreeSet<_> = kills[a]
                 .union(&kills[b])
                 .copied()
-                .filter(|m| !others.contains(m))
+                .filter(|&m| {
+                    coverage[m]
+                        == usize::from(kills[a].contains(&m)) + usize::from(kills[b].contains(&m))
+                })
                 .collect();
             if let Some(replacement) = (0..kills.len()).find(|&i| {
                 !retained.contains(&i)

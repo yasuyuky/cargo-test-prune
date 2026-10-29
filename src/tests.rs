@@ -74,6 +74,43 @@ fn duplicate_tests_are_not_both_removed_and_unique_kills_are_retained() {
 }
 
 #[test]
+fn unique_kills_use_all_tests_and_preserve_mutant_numbers() {
+    let mut evidence = analysis(&[&[1, 4], &[1], &[4], &[6]]);
+    evidence.mutants[2].status = MutationStatus::Unviable;
+    evidence.mutants[2].outcomes.clear();
+    let result = minimize(&evidence, Weight::Count, &[]).unwrap();
+    assert_eq!(result.detected_mutants, 3);
+    assert_eq!(result.retained.len(), 2);
+    assert_eq!(result.retained[0].test, evidence.tests[0].id());
+    assert_eq!(result.retained[0].killed_mutants, vec![2, 5]);
+    assert!(result.retained[0].unique_mutants.is_empty());
+    assert_eq!(result.retained[1].test, evidence.tests[3].id());
+    assert_eq!(result.retained[1].unique_mutants, vec![7]);
+}
+
+#[test]
+fn redundant_selections_do_not_remove_the_last_detector() {
+    let mut evidence = analysis(&[&[0, 1], &[0, 2], &[1, 3], &[2, 4]]);
+    evidence.tests[2].duration_ms = 10;
+    evidence.tests[3].duration_ms = 10;
+    let result = minimize(&evidence, Weight::Time, &[]).unwrap();
+    assert_eq!(
+        result
+            .retained
+            .iter()
+            .map(|d| d.test.clone())
+            .collect::<Vec<_>>(),
+        [0, 2, 3].map(|i| evidence.tests[i].id())
+    );
+    assert_eq!(result.candidates.len(), 1);
+    assert_eq!(result.candidates[0].test, evidence.tests[1].id());
+    assert_eq!(
+        result.candidates[0].covered_by,
+        [0, 3].map(|i| evidence.tests[i].id())
+    );
+}
+
+#[test]
 fn weighted_selection_and_explicit_pins_change_the_proposal() {
     let mut evidence = analysis(&[&[0, 1], &[0], &[1]]);
     evidence.tests[0].duration_ms = 100;

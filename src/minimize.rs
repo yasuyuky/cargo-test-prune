@@ -119,7 +119,8 @@ pub fn minimize(analysis: &Analysis, weight: Weight, keep: &[String]) -> Result<
             .copied()
             .filter(|&i| reasons[i].is_none())
             .collect();
-        let Some((a, b, replacement)) = find_swap(&kills, &costs, &retained, &removable) else {
+        let Some((a, b, replacement)) = find_swap(&kills, &costs, &retained, &removable, &coverage)
+        else {
             break;
         };
         for i in [a, b] {
@@ -182,19 +183,18 @@ fn find_swap(
     costs: &[u128],
     retained: &BTreeSet<usize>,
     removable: &[usize],
+    coverage: &[usize],
 ) -> Option<(usize, usize, usize)> {
     for (index, &a) in removable.iter().enumerate() {
         for &b in &removable[index + 1..] {
-            let others: BTreeSet<_> = retained
-                .iter()
-                .filter(|&&i| i != a && i != b)
-                .flat_map(|&i| &kills[i])
-                .copied()
-                .collect();
+            // The replacement must cover mutants that lose every retained detector.
             let needed: BTreeSet<_> = kills[a]
                 .union(&kills[b])
                 .copied()
-                .filter(|m| !others.contains(m))
+                .filter(|&m| {
+                    coverage[m]
+                        == usize::from(kills[a].contains(&m)) + usize::from(kills[b].contains(&m))
+                })
                 .collect();
             if let Some(replacement) = (0..kills.len()).find(|&i| {
                 !retained.contains(&i)

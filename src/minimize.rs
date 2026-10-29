@@ -41,6 +41,10 @@ pub fn minimize(analysis: &Analysis, weight: Weight, keep: &[String]) -> Result<
         );
     }
     let kills = analysis.kills();
+    let mut kill_counts = vec![0_usize; analysis.mutants.len()];
+    for &m in kills.iter().flatten() {
+        kill_counts[m] += 1;
+    }
     let costs: Vec<_> = analysis
         .tests
         .iter()
@@ -130,7 +134,7 @@ pub fn minimize(analysis: &Analysis, weight: Weight, keep: &[String]) -> Result<
     for i in 0..ids.len() {
         let unique: Vec<_> = kills[i]
             .iter()
-            .filter(|m| kills.iter().filter(|set| set.contains(m)).count() == 1)
+            .filter(|&&m| kill_counts[m] == 1)
             .map(|m| m + 1)
             .collect();
         let decision = Decision {

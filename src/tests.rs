@@ -89,6 +89,28 @@ fn unique_kills_use_all_tests_and_preserve_mutant_numbers() {
 }
 
 #[test]
+fn redundant_selections_do_not_remove_the_last_detector() {
+    let mut evidence = analysis(&[&[0, 1], &[0, 2], &[1, 3], &[2, 4]]);
+    evidence.tests[2].duration_ms = 10;
+    evidence.tests[3].duration_ms = 10;
+    let result = minimize(&evidence, Weight::Time, &[]).unwrap();
+    assert_eq!(
+        result
+            .retained
+            .iter()
+            .map(|d| d.test.clone())
+            .collect::<Vec<_>>(),
+        [0, 2, 3].map(|i| evidence.tests[i].id())
+    );
+    assert_eq!(result.candidates.len(), 1);
+    assert_eq!(result.candidates[0].test, evidence.tests[1].id());
+    assert_eq!(
+        result.candidates[0].covered_by,
+        [0, 3].map(|i| evidence.tests[i].id())
+    );
+}
+
+#[test]
 fn weighted_selection_and_explicit_pins_change_the_proposal() {
     let mut evidence = analysis(&[&[0, 1], &[0], &[1]]);
     evidence.tests[0].duration_ms = 100;

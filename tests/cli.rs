@@ -221,3 +221,26 @@ fn apply_removes_candidates_and_preserves_pinned_and_ignored_tests() {
             .unwrap(),
     );
 }
+
+#[test]
+fn apply_with_no_candidates_leaves_sources_unchanged() {
+    let dir = fixture();
+    mutants(dir.path(), &["false"]);
+    let output = run(
+        dir.path(),
+        &[
+            "analyze",
+            "--mutants-file",
+            "mutants.json",
+            "--apply",
+            "--keep",
+            "overlap/",
+        ],
+    );
+    success(&output);
+    assert!(String::from_utf8_lossy(&output.stdout).contains("No removal candidates;"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
+        include_str!("fixtures/overlap/src/lib.rs")
+    );
+}

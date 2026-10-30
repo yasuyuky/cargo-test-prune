@@ -325,4 +325,25 @@ mod tests {
         assert_eq!(found, path);
         assert_eq!(&source[range], "#[test] fn duplicate() {}");
     }
+
+    #[test]
+    fn refuses_ambiguous_conditional_definitions_and_redirected_modules() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("lib.rs");
+        for (source, names) in [
+            (
+                "#[cfg(unix)] #[test] fn t() {} #[cfg(windows)] #[test] fn t() {}",
+                vec!["t"],
+            ),
+            ("#[path = \"other.rs\"] mod tests;", vec!["tests", "t"]),
+            (
+                "#[cfg_attr(unix, path = \"other.rs\")] mod tests;",
+                vec!["tests", "t"],
+            ),
+            ("fn t() {}", vec!["t"]),
+        ] {
+            fs::write(&path, source).unwrap();
+            assert!(locate(&path, dir.path(), &names).is_err());
+        }
+    }
 }

@@ -346,4 +346,32 @@ mod tests {
             assert!(locate(&path, dir.path(), &names).is_err());
         }
     }
+
+    #[test]
+    fn refuses_stale_sources_before_writing_any_file() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("first.rs"), "first").unwrap();
+        fs::write(dir.path().join("second.rs"), "edited by user").unwrap();
+        let edits = vec![
+            Edit {
+                path: "first.rs".into(),
+                before: "first".into(),
+                after: "".into(),
+            },
+            Edit {
+                path: "second.rs".into(),
+                before: "second".into(),
+                after: "".into(),
+            },
+        ];
+        assert!(commit(dir.path(), &edits).is_err());
+        assert_eq!(
+            fs::read_to_string(dir.path().join("first.rs")).unwrap(),
+            "first"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.path().join("second.rs")).unwrap(),
+            "edited by user"
+        );
+    }
 }

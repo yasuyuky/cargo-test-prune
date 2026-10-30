@@ -11,6 +11,12 @@ use syn::{Item, ext::IdentExt, spanned::Spanned};
 
 use crate::{matrix::Test, report::Report, runner, runner::Runner};
 
+struct Edit {
+    path: PathBuf,
+    before: String,
+    after: String,
+}
+
 fn target_source(runner: &Runner<'_>, test: &Test) -> Result<PathBuf> {
     let packages = runner.workspace.metadata["packages"]
         .as_array()
@@ -121,4 +127,41 @@ fn locate_items(
         }
         _ => unreachable!(),
     }
+}
+
+fn commit(root: &Path, edits: &[Edit]) -> Result<()> {
+    let mut staged = Vec::new();
+    for edit in edits {
+        let path = root.join(&edit.path);
+        // Check every file before replacing any, including newly introduced symlinks.
+        let mut component = root.to_owned();
+        for part in edit.path.components() {
+            component.push(part);
+            ensure!(
+                !fs::symlink_metadata(&component)?.file_type().is_symlink(),
+                "source path became a symlink: {}",
+                component.display()
+            );
+        }
+        ensure!(
+            fs::read_to_string(&path)? == edit.before,
+            "source changed since analysis: {}; no removals applied",
+            path.display()
+        );
+        let mut file = tempfile::NamedTempFile::new_in(path.parent().unwrap())?;
+        file.as_file()
+            .set_permissions(fs::metadata(&path)?.permissions())?;
+        file.write_all(edit.after.as_bytes())?;
+        staged.push((path, file));
+    }
+    for (index, (path, file)) in staged.into_iter().enumerate() {
+        if let Err(error) = file.persist(&path) {
+            for previous in &edits[..index] {
+                fs::write(root.join(&previous.path), &previous.before)
+                    .context("failed to restore sources after a write error")?;
+            }
+            return Err(error).with_context(|| format!("replace {}", path.display()));
+        }
+    }
+    Ok(())
 }

@@ -277,3 +277,28 @@ fn apply_refuses_macro_generated_candidates_without_changing_any_sources() {
     );
     assert!(dir.path().join("test-prune.json").is_file());
 }
+
+#[test]
+fn apply_does_not_write_sources_when_removal_breaks_the_build() {
+    let dir = fixture();
+    let source = include_str!("fixtures/overlap/src/lib.rs").replace(
+        "assert!(positive(1));",
+        "positive_two(); assert!(positive(1));",
+    );
+    fs::write(dir.path().join("src/lib.rs"), &source).unwrap();
+    mutants(dir.path(), &["false"]);
+    let output = run(
+        dir.path(),
+        &["analyze", "--mutants-file", "mutants.json", "--apply"],
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("removal verification build failed"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
+        source
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("tests/integration.rs")).unwrap(),
+        include_str!("fixtures/overlap/tests/integration.rs")
+    );
+}

@@ -81,8 +81,10 @@ dependencies = [
  "clap",
  "ctrlc",
  "libc",
+ "proc-macro2",
  "serde",
  "serde_json",
+ "syn",
  "tempfile",
  "toml",
 ]

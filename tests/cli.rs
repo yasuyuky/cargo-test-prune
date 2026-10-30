@@ -99,6 +99,10 @@ fn measures_actual_tests_and_keeps_the_detection_union() {
         fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
         include_str!("fixtures/overlap/src/lib.rs")
     );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("tests/integration.rs")).unwrap(),
+        include_str!("fixtures/overlap/tests/integration.rs")
+    );
     let replay = run(
         dir.path(),
         &["report", "test-prune.json", "--keep", "positive_two"],
@@ -151,10 +155,211 @@ fn workspace_scope_features_and_package_selection_are_respected() {
     assert!(tests.iter().any(|t| t["name"] == "extra_test"));
     let selected = run(
         dir.path(),
-        &["analyze", "--mutants-file", "mutants.json", "-p", "overlap"],
+        &[
+            "analyze",
+            "--mutants-file",
+            "mutants.json",
+            "-p",
+            "overlap",
+            "--apply",
+        ],
     );
     success(&selected);
     let tests = read_tests();
     assert_eq!(tests.len(), 6);
     assert!(tests.iter().all(|t| t["target"]["package"] == "overlap"));
+    assert!(
+        fs::read_to_string(dir.path().join("src/lib.rs"))
+            .unwrap()
+            .contains("fn extra_test()")
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("consumer/src/lib.rs")).unwrap(),
+        "#[test]\nfn positive_one() { assert!(overlap::positive(1)); }\n"
+    );
+}
+
+#[test]
+fn apply_removes_candidates_and_preserves_pinned_and_ignored_tests() {
+    let dir = fixture();
+    mutants(dir.path(), &["true", "false", "value >= 0"]);
+    let output = run(
+        dir.path(),
+        &[
+            "analyze",
+            "--mutants-file",
+            "mutants.json",
+            "--apply",
+            "--keep",
+            "positive_two",
+        ],
+    );
+    success(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Removed 3 tests from 2 source files"));
+    assert!(!stdout.contains("No source files were changed"));
+    let source = fs::read_to_string(dir.path().join("src/lib.rs")).unwrap();
+    assert!(!source.contains("fn positive_one()"));
+    assert!(!source.contains("fn negative()"));
+    for name in ["positive_two", "zero", "ignored"] {
+        assert!(source.contains(&format!("fn {name}()")));
+    }
+    assert!(source.contains("#[ignore = \"Not part of the observed suite\"]"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("tests/integration.rs")).unwrap(),
+        ""
+    );
+    let report: Value =
+        serde_json::from_str(&fs::read_to_string(dir.path().join("test-prune.json")).unwrap())
+            .unwrap();
+    assert_eq!(report["analysis"]["tests"].as_array().unwrap().len(), 6);
+    success(
+        &Command::new(env!("CARGO"))
+            .current_dir(dir.path())
+            .args(["test", "--offline", "--quiet"])
+            .output()
+            .unwrap(),
+    );
+}
+
+#[test]
+fn apply_with_no_candidates_leaves_sources_unchanged() {
+    let dir = fixture();
+    mutants(dir.path(), &["false"]);
+    let output = run(
+        dir.path(),
+        &[
+            "analyze",
+            "--mutants-file",
+            "mutants.json",
+            "--apply",
+            "--keep",
+            "overlap/",
+        ],
+    );
+    success(&output);
+    assert!(String::from_utf8_lossy(&output.stdout).contains("No removal candidates;"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
+        include_str!("fixtures/overlap/src/lib.rs")
+    );
+}
+
+#[test]
+fn apply_refuses_macro_generated_candidates_without_changing_any_sources() {
+    let dir = fixture();
+    let source = format!(
+        "{}\nmacro_rules! generate {{ () => {{ #[test] fn generated() {{ assert!(positive(1)); }} }} }}\ngenerate!();\n",
+        include_str!("fixtures/overlap/src/lib.rs")
+    );
+    fs::write(dir.path().join("src/lib.rs"), &source).unwrap();
+    mutants(dir.path(), &["false"]);
+    let output = run(
+        dir.path(),
+        &[
+            "analyze",
+            "--mutants-file",
+            "mutants.json",
+            "--apply",
+            "--keep",
+            "positive_one",
+        ],
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot safely remove"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
+        source
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("tests/integration.rs")).unwrap(),
+        include_str!("fixtures/overlap/tests/integration.rs")
+    );
+    assert!(dir.path().join("test-prune.json").is_file());
+}
+
+#[test]
+fn apply_does_not_write_sources_when_removal_breaks_the_build() {
+    let dir = fixture();
+    let source = include_str!("fixtures/overlap/src/lib.rs").replace(
+        "assert!(positive(1));",
+        "positive_two(); assert!(positive(1));",
+    );
+    fs::write(dir.path().join("src/lib.rs"), &source).unwrap();
+    mutants(dir.path(), &["false"]);
+    let output = run(
+        dir.path(),
+        &["analyze", "--mutants-file", "mutants.json", "--apply"],
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("removal verification build failed"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
+        source
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("tests/integration.rs")).unwrap(),
+        include_str!("fixtures/overlap/tests/integration.rs")
+    );
+}
+
+#[test]
+fn apply_does_not_write_sources_when_a_retained_test_fails() {
+    let dir = fixture();
+    let source = include_str!("fixtures/overlap/src/lib.rs").replace(
+        "assert!(positive(1));",
+        "assert!(positive(1)); assert!(include_str!(\"lib.rs\").contains(concat!(\"fn positive_\", \"two()\")));",
+    );
+    fs::write(dir.path().join("src/lib.rs"), &source).unwrap();
+    mutants(dir.path(), &["false"]);
+    let output = run(
+        dir.path(),
+        &["analyze", "--mutants-file", "mutants.json", "--apply"],
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("retained test failed verification"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
+        source
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("tests/integration.rs")).unwrap(),
+        include_str!("fixtures/overlap/tests/integration.rs")
+    );
+}
+
+#[test]
+fn apply_refuses_removal_that_also_deletes_a_retained_test_in_another_target() {
+    let dir = fixture();
+    let source = format!(
+        "{}\nfn main() {{}}\n",
+        include_str!("fixtures/overlap/src/lib.rs")
+    );
+    fs::write(dir.path().join("src/lib.rs"), &source).unwrap();
+    fs::write(
+        dir.path().join("Cargo.toml"),
+        format!(
+            "{}\n[[bin]]\nname = \"shared\"\npath = \"src/lib.rs\"\n",
+            include_str!("fixtures/overlap/Cargo.toml")
+        ),
+    )
+    .unwrap();
+    mutants(dir.path(), &["false"]);
+    let output = run(
+        dir.path(),
+        &["analyze", "--mutants-file", "mutants.json", "--apply"],
+    );
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("removal changed unexpected test identities")
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
+        source
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("tests/integration.rs")).unwrap(),
+        include_str!("fixtures/overlap/tests/integration.rs")
+    );
 }

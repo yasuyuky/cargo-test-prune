@@ -287,4 +287,22 @@ mod tests {
             "fn helper() {}  fn kept() {}"
         );
     }
+
+    #[test]
+    fn preserves_utf8_prefixes_shebangs_and_line_endings() {
+        for prefix in [
+            "",
+            "\u{feff}",
+            "#!/usr/bin/env rustx\r\n",
+            "\u{feff}#!/usr/bin/env rustx\r\n",
+        ] {
+            let before = format!(
+                "{prefix}// 日本語\r\n#[test]\r\nfn candidate() {{}}\r\nfn helper() {{}}\r\n"
+            );
+            assert_eq!(
+                remove(&before, "candidate"),
+                format!("{prefix}// 日本語\r\nfn helper() {{}}\r\n")
+            );
+        }
+    }
 }

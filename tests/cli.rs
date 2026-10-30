@@ -327,3 +327,39 @@ fn apply_does_not_write_sources_when_a_retained_test_fails() {
         include_str!("fixtures/overlap/tests/integration.rs")
     );
 }
+
+#[test]
+fn apply_refuses_removal_that_also_deletes_a_retained_test_in_another_target() {
+    let dir = fixture();
+    let source = format!(
+        "{}\nfn main() {{}}\n",
+        include_str!("fixtures/overlap/src/lib.rs")
+    );
+    fs::write(dir.path().join("src/lib.rs"), &source).unwrap();
+    fs::write(
+        dir.path().join("Cargo.toml"),
+        format!(
+            "{}\n[[bin]]\nname = \"shared\"\npath = \"src/lib.rs\"\n",
+            include_str!("fixtures/overlap/Cargo.toml")
+        ),
+    )
+    .unwrap();
+    mutants(dir.path(), &["false"]);
+    let output = run(
+        dir.path(),
+        &["analyze", "--mutants-file", "mutants.json", "--apply"],
+    );
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("removal changed unexpected test identities")
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
+        source
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("tests/integration.rs")).unwrap(),
+        include_str!("fixtures/overlap/tests/integration.rs")
+    );
+}

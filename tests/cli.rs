@@ -99,6 +99,10 @@ fn measures_actual_tests_and_keeps_the_detection_union() {
         fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
         include_str!("fixtures/overlap/src/lib.rs")
     );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("tests/integration.rs")).unwrap(),
+        include_str!("fixtures/overlap/tests/integration.rs")
+    );
     let replay = run(
         dir.path(),
         &["report", "test-prune.json", "--keep", "positive_two"],

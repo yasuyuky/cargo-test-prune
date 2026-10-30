@@ -305,4 +305,24 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn resolves_nested_file_modules_and_same_named_tests() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("outer/inner")).unwrap();
+        let root = dir.path().join("lib.rs");
+        fs::write(&root, "mod outer; #[test] fn duplicate() {} ").unwrap();
+        fs::write(dir.path().join("outer.rs"), "mod inner;").unwrap();
+        let path = dir.path().join("outer/inner/mod.rs");
+        let source = "mod inline { #[test] fn duplicate() {} }";
+        fs::write(&path, source).unwrap();
+        let (found, range) = locate(
+            &root,
+            dir.path(),
+            &["outer", "inner", "inline", "duplicate"],
+        )
+        .unwrap();
+        assert_eq!(found, path);
+        assert_eq!(&source[range], "#[test] fn duplicate() {}");
+    }
 }

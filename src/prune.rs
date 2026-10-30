@@ -374,4 +374,23 @@ mod tests {
             "edited by user"
         );
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_symlinked_sources() {
+        let dir = tempfile::tempdir().unwrap();
+        let external = tempfile::tempdir().unwrap();
+        fs::write(external.path().join("test.rs"), "before").unwrap();
+        std::os::unix::fs::symlink(external.path(), dir.path().join("src")).unwrap();
+        let edits = [Edit {
+            path: "src/test.rs".into(),
+            before: "before".into(),
+            after: "".into(),
+        }];
+        assert!(commit(dir.path(), &edits).is_err());
+        assert_eq!(
+            fs::read_to_string(external.path().join("test.rs")).unwrap(),
+            "before"
+        );
+    }
 }

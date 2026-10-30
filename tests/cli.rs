@@ -244,3 +244,36 @@ fn apply_with_no_candidates_leaves_sources_unchanged() {
         include_str!("fixtures/overlap/src/lib.rs")
     );
 }
+
+#[test]
+fn apply_refuses_macro_generated_candidates_without_changing_any_sources() {
+    let dir = fixture();
+    let source = format!(
+        "{}\nmacro_rules! generate {{ () => {{ #[test] fn generated() {{ assert!(positive(1)); }} }} }}\ngenerate!();\n",
+        include_str!("fixtures/overlap/src/lib.rs")
+    );
+    fs::write(dir.path().join("src/lib.rs"), &source).unwrap();
+    mutants(dir.path(), &["false"]);
+    let output = run(
+        dir.path(),
+        &[
+            "analyze",
+            "--mutants-file",
+            "mutants.json",
+            "--apply",
+            "--keep",
+            "positive_one",
+        ],
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot safely remove"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
+        source
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("tests/integration.rs")).unwrap(),
+        include_str!("fixtures/overlap/tests/integration.rs")
+    );
+    assert!(dir.path().join("test-prune.json").is_file());
+}

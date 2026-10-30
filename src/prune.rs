@@ -257,3 +257,34 @@ fn commit(root: &Path, edits: &[Edit]) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn remove(source: &str, name: &str) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("lib.rs");
+        fs::write(&path, source).unwrap();
+        let (_, range) = locate(&path, dir.path(), &name.split("::").collect::<Vec<_>>()).unwrap();
+        let mut result = source.to_owned();
+        result.replace_range(range, "");
+        result
+    }
+
+    #[test]
+    fn removes_attributes_and_docs_without_touching_neighbors() {
+        let before = "mod tests {\n    // Keep this context.\n    /// 冗長なテスト\n    #[test]\n    #[should_panic]\n    fn r#type() { panic!(\"} /* { */\"); }\n    fn helper() {}\n}\n";
+        assert_eq!(
+            remove(before, "tests::type"),
+            "mod tests {\n    // Keep this context.\n    fn helper() {}\n}\n"
+        );
+        assert_eq!(
+            remove(
+                "fn helper() {} #[test] fn candidate() {} fn kept() {}",
+                "candidate"
+            ),
+            "fn helper() {}  fn kept() {}"
+        );
+    }
+}

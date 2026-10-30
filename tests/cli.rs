@@ -178,3 +178,46 @@ fn workspace_scope_features_and_package_selection_are_respected() {
         "#[test]\nfn positive_one() { assert!(overlap::positive(1)); }\n"
     );
 }
+
+#[test]
+fn apply_removes_candidates_and_preserves_pinned_and_ignored_tests() {
+    let dir = fixture();
+    mutants(dir.path(), &["true", "false", "value >= 0"]);
+    let output = run(
+        dir.path(),
+        &[
+            "analyze",
+            "--mutants-file",
+            "mutants.json",
+            "--apply",
+            "--keep",
+            "positive_two",
+        ],
+    );
+    success(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Removed 3 tests from 2 source files"));
+    assert!(!stdout.contains("No source files were changed"));
+    let source = fs::read_to_string(dir.path().join("src/lib.rs")).unwrap();
+    assert!(!source.contains("fn positive_one()"));
+    assert!(!source.contains("fn negative()"));
+    for name in ["positive_two", "zero", "ignored"] {
+        assert!(source.contains(&format!("fn {name}()")));
+    }
+    assert!(source.contains("#[ignore = \"Not part of the observed suite\"]"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("tests/integration.rs")).unwrap(),
+        ""
+    );
+    let report: Value =
+        serde_json::from_str(&fs::read_to_string(dir.path().join("test-prune.json")).unwrap())
+            .unwrap();
+    assert_eq!(report["analysis"]["tests"].as_array().unwrap().len(), 6);
+    success(
+        &Command::new(env!("CARGO"))
+            .current_dir(dir.path())
+            .args(["test", "--offline", "--quiet"])
+            .output()
+            .unwrap(),
+    );
+}

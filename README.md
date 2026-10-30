@@ -5,7 +5,8 @@ Find Rust tests whose **observed mutant detection** is covered by tests you keep
 AI-assisted development makes adding regression tests easy; deciding which old
 tests still add value is harder. This tool measures which deliberate bugs each
 test catches, then proposes a smaller test set with the same observed detection.
-It reports evidence for review and never deletes tests.
+It reports evidence for review. Add `--apply` to delete the proposed tests after
+verifying the remaining tests in a temporary copy.
 
 ## Try it
 
@@ -90,6 +91,34 @@ report numbers and mutation descriptions. Unrelated mutants and tests are omitte
 The diagrams reflect `--keep` and `--weight`, just like the default text report;
 the saved JSON is unchanged. Open the Markdown in a Mermaid-capable viewer.
 
+## Apply the proposal
+
+```sh
+# Analyze and remove the combined proposal, preserving pinned tests.
+cargo test-prune analyze --apply --keep negative
+```
+
+`--apply` saves the evidence, removes candidate functions in the temporary copy,
+then rebuilds, checks that exactly the retained tests remain, and runs each of
+them against its baseline outcome. Only after verification succeeds are the
+edited files written back to the original workspace. If an edited source file
+has changed since it was copied, removal stops before writing any sources.
+Without `--apply`, analysis leaves the original source files unchanged.
+
+Removal supports explicit `#[test]` functions in unit and integration test
+targets, including inline modules and ordinary `mod name;` files. Attributes
+and doc comments attached to the function are removed with it; surrounding code
+and formatting are preserved. Macro-generated tests, ambiguous definitions,
+and modules using `#[path]` or `#[cfg_attr]` cannot be removed automatically.
+If any candidate cannot be located safely, no removals are applied; use `--keep`
+to retain it. Empty modules and unused imports or helpers are left in place.
+
+The saved JSON describes the evidence from **before deletion**. `report` remains
+read-only; applying requires a fresh `analyze --apply` run. Verification uses
+the selected packages and features and does not rerun mutation measurements.
+Review the resulting diff and test other relevant feature combinations before
+committing it.
+
 ## How measurement works
 
 1. Copy the workspace, including uncommitted files, to a temporary directory.
@@ -147,8 +176,8 @@ provenance of an imported list. The JSON listing interface is documented in
 - Compilation and tests execute project code with the user's normal access.
   The temporary copy isolates mutation edits; it is not a security sandbox.
 - Measurements run serially and cost roughly mutants × tests invocations.
-  No cache, parallel scheduling, LOC estimate, deletion patch, or automatic
-  source editing is included.
+  No cache, parallel scheduling, LOC estimate, or standalone deletion patch
+  is included.
 - Evidence covers the selected mutations and exact individual runs. It does
   not prove future bug detection, test independence, or absence of flakiness.
   Review specification documentation and diagnostic value before deleting a

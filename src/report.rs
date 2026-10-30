@@ -140,7 +140,7 @@ impl Report {
         println!(
             "Confidence: limited to observed mutants. Review specification value before deletion."
         );
-        println!("No source files were changed. Greedy selection is not a guaranteed minimum.");
+        println!("Greedy selection is not a guaranteed minimum.");
     }
 }
 

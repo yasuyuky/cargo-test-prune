@@ -17,6 +17,98 @@ struct Edit {
     after: String,
 }
 
+pub fn apply(runner: &Runner<'_>, report: &Report) -> Result<()> {
+    let candidates: BTreeSet<_> = report
+        .recommendation
+        .candidates
+        .iter()
+        .map(|decision| decision.test.as_str())
+        .collect();
+    if candidates.is_empty() {
+        println!("No removal candidates; no source files were changed.");
+        return Ok(());
+    }
+    let mut removals: BTreeMap<PathBuf, Vec<Range<usize>>> = BTreeMap::new();
+    for test in &report.analysis.tests {
+        if !candidates.contains(test.id().as_str()) {
+            continue;
+        }
+        let source = target_source(runner, test)?;
+        let (path, range) = locate(
+            &source,
+            source.parent().context("target source has no parent")?,
+            &test.name.split("::").collect::<Vec<_>>(),
+        )
+        .with_context(|| format!("cannot safely remove {}; retain it with --keep", test.id()))?;
+        ensure!(
+            path.starts_with(&runner.workspace.root),
+            "test source is outside the analysis copy: {}",
+            path.display()
+        );
+        removals.entry(path).or_default().push(range);
+    }
+    let mut edits = Vec::new();
+    for (path, mut ranges) in removals {
+        ranges.sort_by_key(|range| range.start);
+        ranges.dedup();
+        ensure!(
+            ranges.windows(2).all(|pair| pair[0].end <= pair[1].start),
+            "overlapping test source ranges: {}",
+            path.display()
+        );
+        let before = fs::read_to_string(&path)?;
+        let mut after = before.clone();
+        for range in ranges.into_iter().rev() {
+            after.replace_range(range, "");
+        }
+        edits.push(Edit {
+            path: path.strip_prefix(&runner.workspace.root)?.to_owned(),
+            before,
+            after,
+        });
+    }
+    for edit in &edits {
+        fs::write(runner.workspace.root.join(&edit.path), &edit.after)?;
+    }
+    eprintln!("Verifying removal in the workspace copy...");
+    let build = runner.build()?;
+    ensure!(
+        build.success(),
+        "removal verification build failed; original sources are unchanged:\n{}",
+        build.diagnostic()
+    );
+    let remaining = runner.discover(&build)?;
+    let expected: BTreeSet<_> = report
+        .recommendation
+        .retained
+        .iter()
+        .map(|decision| decision.test.clone())
+        .collect();
+    ensure!(
+        remaining.iter().map(Test::id).collect::<BTreeSet<_>>() == expected,
+        "removal changed unexpected test identities; original sources are unchanged"
+    );
+    for test in &report.analysis.tests {
+        if !expected.contains(&test.id()) {
+            continue;
+        }
+        let output = runner.test(test)?;
+        ensure!(
+            runner::outcome(&output) == test.baseline,
+            "retained test failed verification: {}; original sources are unchanged:\n{}",
+            test.id(),
+            output.diagnostic()
+        );
+    }
+    commit(&runner.workspace.original, &edits)?;
+    println!(
+        "Removed {} tests from {} source files; remaining tests verified.",
+        candidates.len(),
+        edits.len()
+    );
+    Ok(())
+}
+
 fn target_source(runner: &Runner<'_>, test: &Test) -> Result<PathBuf> {
     let packages = runner.workspace.metadata["packages"]
         .as_array()

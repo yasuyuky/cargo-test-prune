@@ -2,6 +2,7 @@ mod matrix;
 mod minimize;
 mod mutants;
 mod process;
+mod prune;
 mod report;
 mod runner;
 mod workspace;
@@ -25,7 +26,7 @@ use workspace::Workspace;
 #[command(
     name = "cargo test-prune",
     version,
-    about = "Find tests with overlapping mutation detection, without deleting source"
+    about = "Find tests with overlapping mutation detection and optionally remove them"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -91,6 +92,9 @@ struct Analyze {
     /// Save all observations and the proposal as JSON
     #[arg(short, long, default_value = "test-prune.json")]
     output: PathBuf,
+    /// Delete removal candidates after verifying the remaining tests in the copy
+    #[arg(long)]
+    apply: bool,
     #[command(flatten)]
     selection: Selection,
 }
@@ -208,6 +212,11 @@ fn analyze(options: Analyze) -> Result<()> {
     report.save(&options.output)?;
     report.print();
     eprintln!("Evidence saved to {}", options.output.display());
+    if options.apply {
+        prune::apply(&runner, &report)?;
+    } else {
+        println!("No source files were changed. Use --apply to remove the candidates.");
+    }
     Ok(())
 }
 

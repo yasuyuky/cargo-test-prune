@@ -302,3 +302,28 @@ fn apply_does_not_write_sources_when_removal_breaks_the_build() {
         include_str!("fixtures/overlap/tests/integration.rs")
     );
 }
+
+#[test]
+fn apply_does_not_write_sources_when_a_retained_test_fails() {
+    let dir = fixture();
+    let source = include_str!("fixtures/overlap/src/lib.rs").replace(
+        "assert!(positive(1));",
+        "assert!(positive(1)); assert!(include_str!(\"lib.rs\").contains(concat!(\"fn positive_\", \"two()\")));",
+    );
+    fs::write(dir.path().join("src/lib.rs"), &source).unwrap();
+    mutants(dir.path(), &["false"]);
+    let output = run(
+        dir.path(),
+        &["analyze", "--mutants-file", "mutants.json", "--apply"],
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("retained test failed verification"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("src/lib.rs")).unwrap(),
+        source
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("tests/integration.rs")).unwrap(),
+        include_str!("fixtures/overlap/tests/integration.rs")
+    );
+}

@@ -155,10 +155,26 @@ fn workspace_scope_features_and_package_selection_are_respected() {
     assert!(tests.iter().any(|t| t["name"] == "extra_test"));
     let selected = run(
         dir.path(),
-        &["analyze", "--mutants-file", "mutants.json", "-p", "overlap"],
+        &[
+            "analyze",
+            "--mutants-file",
+            "mutants.json",
+            "-p",
+            "overlap",
+            "--apply",
+        ],
     );
     success(&selected);
     let tests = read_tests();
     assert_eq!(tests.len(), 6);
     assert!(tests.iter().all(|t| t["target"]["package"] == "overlap"));
+    assert!(
+        fs::read_to_string(dir.path().join("src/lib.rs"))
+            .unwrap()
+            .contains("fn extra_test()")
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("consumer/src/lib.rs")).unwrap(),
+        "#[test]\nfn positive_one() { assert!(overlap::positive(1)); }\n"
+    );
 }
